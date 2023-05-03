@@ -17,9 +17,6 @@ import androidx.appcompat.app.AppCompatActivity;
 import android.os.Bundle;
 import com.example.androidpredictor.ml.Detect;
 import org.tensorflow.lite.DataType;
-import org.tensorflow.lite.Tensor;
-import org.tensorflow.lite.TensorFlowLite;
-import org.tensorflow.lite.support.image.TensorImage;
 import org.tensorflow.lite.support.tensorbuffer.TensorBuffer;
 
 import java.io.IOException;
@@ -28,11 +25,12 @@ import java.nio.ByteOrder;
 
 public class MainActivity extends AppCompatActivity {
 
-    ImageView imagem;
-    Button selecionarBtn, predictBtn;
-    TextView resultado;
-    TextView classe;
-    Bitmap bitmap;
+    private ImageView imagem;
+    Button selecionarBtn, predictBtn, cameraBtn;
+    private TextView resultado;
+    private TextView classe;
+    private Bitmap bitmap;
+    private Detect model;
 
     String[] classes = {"CocaCola", "Pepsi"};
 
@@ -44,6 +42,7 @@ public class MainActivity extends AppCompatActivity {
         imagem = findViewById(R.id.imagem);
         selecionarBtn = findViewById(R.id.selecionar);
         predictBtn = findViewById(R.id.predict);
+        cameraBtn = findViewById(R.id.camera);
         resultado = findViewById(R.id.resultado);
         classe = findViewById(R.id.classe);
 
@@ -62,7 +61,7 @@ public class MainActivity extends AppCompatActivity {
             public void onClick(View v) {
 
                 try {
-                    Detect model = Detect.newInstance(MainActivity.this);
+                    model = Detect.newInstance(MainActivity.this);
 
                     int height = bitmap.getHeight();
                     int width = bitmap.getWidth();
@@ -72,6 +71,7 @@ public class MainActivity extends AppCompatActivity {
                     ByteBuffer input = ByteBuffer.allocateDirect(320 * 320 * 3 * 4).order(ByteOrder.nativeOrder());
                     bitmap = Bitmap.createScaledBitmap(bitmap, 320, 320, true);
 
+                    // Normalização do input.
                     for (int y = 0; y < 320; y++) {
                         for (int x = 0; x < 320; x++) {
                             int px = bitmap.getPixel(x, y);
@@ -81,9 +81,6 @@ public class MainActivity extends AppCompatActivity {
                             int g = Color.green(px);
                             int b = Color.blue(px);
 
-                            // Normalize channel values to [-1.0, 1.0]. This requirement depends
-                            // on the model. For example, some models might require values to be
-                            // normalized to the range [0.0, 1.0] instead.
                             float rf = (r) / 255.0f;
                             float gf = (g) / 255.0f;
                             float bf = (b) / 255.0f;
@@ -108,6 +105,7 @@ public class MainActivity extends AppCompatActivity {
                     // Index Of Classes Detected.
                     TensorBuffer outputFeature3 = outputs.getOutputFeature3AsTensorBuffer();
 
+                    // Converte-se o output do modelo num array float.
                     float[] detectionScores = outputFeature0.getFloatArray();
                     float[] boundingBoxes = outputFeature1.getFloatArray();
                     float[] numberOfDetections = outputFeature2.getFloatArray();
@@ -136,7 +134,7 @@ public class MainActivity extends AppCompatActivity {
                     // Show the results on UI.
                     imagem.setImageBitmap(processedBitmap);
                     resultado.setText("Score: " + String.valueOf(score));
-                    classe.setText("Classe identificada: " + classes[ (int) indexOfClassesDetected[mostConfident]]);
+                    classe.setText("Classe identificada: " + classes[(int) classIndex]);
 
                     // Releases model resources if no longer used.
                     model.close();
@@ -148,6 +146,18 @@ public class MainActivity extends AppCompatActivity {
                     Toast.makeText(MainActivity.this, "Error during inference: " + e.getMessage(), Toast.LENGTH_SHORT).show();
                 }
 
+            }
+        });
+
+        cameraBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                try {
+                    Intent intent = new Intent(MainActivity.this, CameraActivity.class);
+                    startActivity(intent);
+                } catch (Exception e) {
+                    System.out.println(e.toString());
+                }
             }
         });
     }
