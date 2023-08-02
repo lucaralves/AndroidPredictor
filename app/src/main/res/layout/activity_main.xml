@@ -46,23 +46,4 @@
                 android:layout_marginTop="20dp"
                 android:layout_centerHorizontal="true"/>
 
-        <TextView android:layout_width="match_parent"
-                  android:layout_height="40dp"
-                  android:text="Resultado: "
-                  android:layout_below="@+id/predict"
-                  android:id="@+id/resultado"
-                  android:textSize="20dp"
-                  android:textAlignment="center"
-                  android:layout_marginTop="88dp"/>
-
-        <TextView android:layout_width="match_parent"
-                  android:layout_height="40dp"
-                  android:text="Classe identificada: "
-                  android:layout_below="@+id/predict"
-                  android:id="@+id/classe"
-                  android:textSize="20dp"
-                  android:textAlignment="center"
-                  android:layout_marginTop="144dp"/>
-
-
 </RelativeLayout>

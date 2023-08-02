@@ -10,29 +10,26 @@ import android.provider.MediaStore;
 import android.view.View;
 import android.widget.Button;
 import android.widget.ImageView;
-import android.widget.TextView;
 import android.widget.Toast;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import android.os.Bundle;
 import com.example.androidpredictor.ml.Detect;
-import org.tensorflow.lite.DataType;
+import org.tensorflow.lite.support.image.TensorImage;
 import org.tensorflow.lite.support.tensorbuffer.TensorBuffer;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
+import java.util.ArrayList;
 
 public class MainActivity extends AppCompatActivity {
 
     private ImageView imagem;
     Button selecionarBtn, predictBtn, cameraBtn;
-    private TextView resultado;
-    private TextView classe;
     private Bitmap bitmap;
+    private Bitmap processedBitmap;
     private Detect model;
 
-    String[] classes = {"CocaCola", "Pepsi"};
+    String[] classes = {"FF1", "FF2", "FB2", "FB1", "FE1", "FE2", "GB2", "FP1", "FP2", "FM1", "FM2", "GB1"};
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -43,8 +40,6 @@ public class MainActivity extends AppCompatActivity {
         selecionarBtn = findViewById(R.id.selecionar);
         predictBtn = findViewById(R.id.predict);
         cameraBtn = findViewById(R.id.camera);
-        resultado = findViewById(R.id.resultado);
-        classe = findViewById(R.id.classe);
 
         selecionarBtn.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -62,79 +57,49 @@ public class MainActivity extends AppCompatActivity {
 
                 try {
                     model = Detect.newInstance(MainActivity.this);
+                    processedBitmap = bitmap;
 
-                    int height = bitmap.getHeight();
-                    int width = bitmap.getWidth();
-
-                    // Creates inputs for reference.
-                    TensorBuffer inputFeature0 = TensorBuffer.createFixedSize(new int[]{1, 320, 320, 3}, DataType.FLOAT32);
-                    ByteBuffer input = ByteBuffer.allocateDirect(320 * 320 * 3 * 4).order(ByteOrder.nativeOrder());
-                    bitmap = Bitmap.createScaledBitmap(bitmap, 320, 320, true);
-
-                    // Normalização do input.
-                    for (int y = 0; y < 320; y++) {
-                        for (int x = 0; x < 320; x++) {
-                            int px = bitmap.getPixel(x, y);
-
-                            // Get channel values from the pixel value.
-                            int r = Color.red(px);
-                            int g = Color.green(px);
-                            int b = Color.blue(px);
-
-                            float rf = (r) / 255.0f;
-                            float gf = (g) / 255.0f;
-                            float bf = (b) / 255.0f;
-
-                            input.putFloat(rf);
-                            input.putFloat(gf);
-                            input.putFloat(bf);
-                        }
-                    }
-
-                    inputFeature0.loadBuffer(input);
+                    TensorImage normalizedInputImageTensor = TensorImage.fromBitmap(bitmap);
 
                     // Runs model inference and gets result.
-                    Detect.Outputs outputs = model.process(inputFeature0);
+                    Detect.Outputs outputs = model.process(normalizedInputImageTensor);
 
                     // Detection Scores.
-                    TensorBuffer outputFeature0 = outputs.getOutputFeature0AsTensorBuffer();
+                    TensorBuffer outputFeature0 = outputs.getScoresAsTensorBuffer();
                     // Bounding Boxes.
-                    TensorBuffer outputFeature1 = outputs.getOutputFeature1AsTensorBuffer();
-                    // Number Of Detections.
-                    TensorBuffer outputFeature2 = outputs.getOutputFeature2AsTensorBuffer();
+                    TensorBuffer outputFeature1 = outputs.getLocationsAsTensorBuffer();
                     // Index Of Classes Detected.
-                    TensorBuffer outputFeature3 = outputs.getOutputFeature3AsTensorBuffer();
+                    TensorBuffer outputFeature3 = outputs.getClassesAsTensorBuffer();
 
                     // Converte-se o output do modelo num array float.
                     float[] detectionScores = outputFeature0.getFloatArray();
                     float[] boundingBoxes = outputFeature1.getFloatArray();
-                    float[] numberOfDetections = outputFeature2.getFloatArray();
                     float[] indexOfClassesDetected = outputFeature3.getFloatArray();
 
-                    // Get the index of the most confident detection.
-                    int mostConfident = maxIndex(detectionScores);
+                    // Get the index of the most confident detections.
+                    ArrayList<Integer> mostConfidents = getMostConfidentDetections(detectionScores);
 
-                    // Get the bounding box coordinates.
-                    float[] box = new float[4];
-                    box[1] = boundingBoxes[mostConfident]; //ymin
-                    box[0] = boundingBoxes[mostConfident + 1]; //xmin
-                    box[3] = boundingBoxes[mostConfident + 2]; // ymax
-                    box[2] = boundingBoxes[mostConfident + 3]; // xmax
+                    for (int i = 0; i < mostConfidents.size(); i++) {
+                        // Get the bounding box coordinates.
+                        float[] box = new float[4];
+                        box[1] = boundingBoxes[mostConfidents.get(i) * 4]; // ymin
+                        box[0] = boundingBoxes[(mostConfidents.get(i) * 4) + 1]; // xmin
+                        box[3] = boundingBoxes[(mostConfidents.get(i) * 4) + 2]; // ymax
+                        box[2] = boundingBoxes[(mostConfidents.get(i) * 4) + 3]; // xmax
 
-                    // Get the detection score.
-                    float score = detectionScores[mostConfident];
+                        // Get the detection score.
+                        float score = detectionScores[mostConfidents.get(i)];
 
-                    // Get the class label index.
-                    float classIndex = indexOfClassesDetected[mostConfident];
+                        // Get the class label index.
+                        float classIndex = indexOfClassesDetected[mostConfidents.get(i)];
 
-                    // Draw the box on image.
-                    Bitmap processedBitmap = drawBoundingBox(bitmap, box);
-                    processedBitmap = Bitmap.createScaledBitmap(processedBitmap, width, height, true);
+                        // Draw the box and label on image.
+                        processedBitmap = drawBoundingBox(processedBitmap, box, score,
+                                classes[(int)classIndex]);
+                    }
 
                     // Show the results on UI.
                     imagem.setImageBitmap(processedBitmap);
-                    resultado.setText("Score: " + String.valueOf(score));
-                    classe.setText("Classe identificada: " + classes[(int) classIndex]);
 
                     // Releases model resources if no longer used.
                     model.close();
@@ -180,7 +145,7 @@ public class MainActivity extends AppCompatActivity {
         super.onActivityResult(requestCode, resultCode, data);
     }
 
-    public static Bitmap drawBoundingBox(Bitmap bitmap, float[] box) {
+    public static Bitmap drawBoundingBox(Bitmap bitmap, float[] box, float score, String label) {
 
         // Create a new bitmap with the same dimensions as the input bitmap.
         Bitmap outputBitmap = Bitmap.createBitmap(bitmap.getWidth(), bitmap.getHeight(), bitmap.getConfig());
@@ -196,7 +161,7 @@ public class MainActivity extends AppCompatActivity {
         paint.setColor(Color.RED);
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeWidth(4.0f);
-        paint.setTextSize(24.0f);
+        paint.setTextSize(80.0f);
 
         // Get the coordinates of the bounding box.
         float xmin = box[0] * bitmap.getWidth();
@@ -207,20 +172,23 @@ public class MainActivity extends AppCompatActivity {
         // Draw the bounding box on the canvas.
         canvas.drawRect(xmin, ymin, xmax, ymax, paint);
 
+        paint.setStyle(Paint.Style.FILL);
+        canvas.drawText(label + " " + score,
+                box[0] * bitmap.getWidth(), box[1] * bitmap.getHeight() , paint);
+
         // Return the output bitmap with the bounding box drawn on it.
         return outputBitmap;
     }
 
-    public static int maxIndex(float[] x) {
-        float maxValue = -Float.MAX_VALUE;
-        int maxIndex = -1;
-        for (int i = 0; i < x.length; i++) {
-            if (x[i] > maxValue) {
-                maxValue = x[i];
-                maxIndex = i;
+    public static ArrayList<Integer> getMostConfidentDetections(float[] detections) {
+
+        ArrayList<Integer> mostConfidentDetections = new ArrayList<>();
+        for (int i = 0; i < detections.length; i++) {
+            if (detections[i] >= 0.70) {
+                mostConfidentDetections.add(i);
             }
         }
 
-        return maxIndex;
+        return mostConfidentDetections;
     }
 }

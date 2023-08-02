@@ -2,12 +2,10 @@ package com.example.androidpredictor;
 
 import android.Manifest;
 import android.content.Context;
-import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.*;
 import android.hardware.camera2.*;
 import android.hardware.camera2.params.StreamConfigurationMap;
-import android.media.ImageReader;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -16,23 +14,21 @@ import android.util.Size;
 import android.util.SparseIntArray;
 import android.view.Surface;
 import android.view.TextureView;
-import android.view.View;
 import android.widget.ImageView;
 import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import com.example.androidpredictor.ml.Detect;
-import org.tensorflow.lite.DataType;
+import org.tensorflow.lite.support.image.TensorImage;
 import org.tensorflow.lite.support.tensorbuffer.TensorBuffer;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
+import java.util.ArrayList;
 import java.util.Arrays;
 
 import static android.content.ContentValues.TAG;
-import static com.example.androidpredictor.MainActivity.maxIndex;
+import static com.example.androidpredictor.MainActivity.*;
 
 public class CameraActivity extends AppCompatActivity {
 
@@ -41,13 +37,9 @@ public class CameraActivity extends AppCompatActivity {
     private static final SparseIntArray ORIENTATIONS = new SparseIntArray();
 
     Bitmap bitmap;
-    Bitmap inputBitmap;
-    int[] colours = new int[] {
-      Color.BLUE, Color.GREEN, Color.RED, Color.CYAN, Color.GRAY, Color.BLACK, Color.DKGRAY, Color.MAGENTA, Color.YELLOW, Color.RED
-    };
-    Paint paint = new Paint();
+    Bitmap processedBitmap;
     Detect model;
-    String[] classes = {"CocaCola", "Pepsi"};
+    String[] classes = {"FF1", "FF2", "FB2", "FB1", "FE1", "FE2", "GB2", "FP1", "FP2", "FM1", "FM2", "GB1"};
 
     private String cameraId;
     protected CameraDevice cameraDevice;
@@ -99,89 +91,50 @@ public class CameraActivity extends AppCompatActivity {
         public void onSurfaceTextureUpdated(@NonNull SurfaceTexture surface) {
 
             bitmap = textureView.getBitmap();
+            processedBitmap = bitmap;
 
             try {
                 model = Detect.newInstance(CameraActivity.this);
 
-                TensorBuffer inputFeature0 = TensorBuffer.createFixedSize(new int[]{1, 320, 320, 3}, DataType.FLOAT32);
-                ByteBuffer input = ByteBuffer.allocateDirect(320 * 320 * 3 * 4).order(ByteOrder.nativeOrder());
-                inputBitmap = Bitmap.createScaledBitmap(bitmap, 320, 320, true);
-
-                // Normalização do input.
-                for (int y = 0; y < 320; y++) {
-                    for (int x = 0; x < 320; x++) {
-                        int px = inputBitmap.getPixel(x, y);
-
-                        // Get channel values from the pixel value.
-                        int r = Color.red(px);
-                        int g = Color.green(px);
-                        int b = Color.blue(px);
-
-                        float rf = (r) / 255.0f;
-                        float gf = (g) / 255.0f;
-                        float bf = (b) / 255.0f;
-
-                        input.putFloat(rf);
-                        input.putFloat(gf);
-                        input.putFloat(bf);
-                    }
-                }
-
-                inputFeature0.loadBuffer(input);
+                TensorImage normalizedInputImageTensor = TensorImage.fromBitmap(bitmap);
 
                 // Runs model inference and gets result.
-                Detect.Outputs outputs = model.process(inputFeature0);
+                Detect.Outputs outputs = model.process(normalizedInputImageTensor);
 
                 // Detection Scores.
-                TensorBuffer outputFeature0 = outputs.getOutputFeature0AsTensorBuffer();
+                TensorBuffer outputFeature0 = outputs.getScoresAsTensorBuffer();
                 // Bounding Boxes.
-                TensorBuffer outputFeature1 = outputs.getOutputFeature1AsTensorBuffer();
-                // Number Of Detections.
-                TensorBuffer outputFeature2 = outputs.getOutputFeature2AsTensorBuffer();
+                TensorBuffer outputFeature1 = outputs.getLocationsAsTensorBuffer();
                 // Index Of Classes Detected.
-                TensorBuffer outputFeature3 = outputs.getOutputFeature3AsTensorBuffer();
+                TensorBuffer outputFeature3 = outputs.getClassesAsTensorBuffer();
 
                 // Converte-se o output do modelo num array float.
                 float[] detectionScores = outputFeature0.getFloatArray();
                 float[] boundingBoxes = outputFeature1.getFloatArray();
-                float[] numberOfDetections = outputFeature2.getFloatArray();
                 float[] indexOfClassesDetected = outputFeature3.getFloatArray();
 
-                // Get the index of the most confident detection.
-                int mostConfident = maxIndex(detectionScores);
+                // Get the index of the most confident detections.
+                ArrayList<Integer> mostConfidents = getMostConfidentDetections(detectionScores);
 
-                // Get the bounding box coordinates.
-                float[] box = new float[4];
-                box[1] = boundingBoxes[mostConfident];   //ymin
-                box[0] = boundingBoxes[mostConfident + 1]; //xmin
-                box[3] = boundingBoxes[mostConfident + 2]; // ymax
-                box[2] = boundingBoxes[mostConfident + 3]; // xmax
+                for (int i = 0; i < mostConfidents.size(); i++) {
+                    // Get the bounding box coordinates.
+                    float[] box = new float[4];
+                    box[1] = boundingBoxes[mostConfidents.get(i) * 4]; // ymin
+                    box[0] = boundingBoxes[(mostConfidents.get(i) * 4) + 1]; // xmin
+                    box[3] = boundingBoxes[(mostConfidents.get(i) * 4) + 2]; // ymax
+                    box[2] = boundingBoxes[(mostConfidents.get(i) * 4) + 3]; // xmax
 
-                // Get the detection score.
-                float score = detectionScores[mostConfident];
+                    // Get the detection score.
+                    float score = detectionScores[mostConfidents.get(i)];
 
-                // Get the class label index.
-                float classIndex = indexOfClassesDetected[mostConfident];
+                    // Get the class label index.
+                    float classIndex = indexOfClassesDetected[mostConfidents.get(i)];
 
-                Bitmap mutable = bitmap.copy(Bitmap.Config.ARGB_8888, true);
-                Canvas canvas = new Canvas(mutable);
-
-                paint.setTextSize(mutable.getHeight()/15f);
-                paint.setStrokeWidth(mutable.getHeight()/85f);
-
-                if (score > 0.85) {
-                    paint.setColor(colours[2]);
-                    paint.setStyle(Paint.Style.STROKE);
-
-                    canvas.drawRect(new RectF(box[0] * mutable.getWidth(), box[1] * mutable.getHeight(),
-                            box[2] * mutable.getWidth(), box[3] * mutable.getHeight()), paint);
-
-                    paint.setStyle(Paint.Style.FILL);
-                    canvas.drawText(classes[(int) classIndex] + " " + score,
-                            box[0] * mutable.getWidth(), box[1] * mutable.getHeight() , paint);
+                    // Draw the box and label on image.
+                    processedBitmap = drawBoundingBox(processedBitmap, box, score,
+                            classes[(int)classIndex]);
                 }
-
-                imageView.setImageBitmap(mutable);
+                imageView.setImageBitmap(processedBitmap);
 
             } catch (IOException e) {
                 e.printStackTrace();
