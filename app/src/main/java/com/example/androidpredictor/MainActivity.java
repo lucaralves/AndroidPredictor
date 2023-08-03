@@ -26,7 +26,6 @@ public class MainActivity extends AppCompatActivity {
     private ImageView imagem;
     Button selecionarBtn, predictBtn, cameraBtn;
     private Bitmap bitmap;
-    private Bitmap processedBitmap;
     private Detect model;
 
     String[] classes = {"FF1", "FF2", "FB2", "FB1", "FE1", "FE2", "GB2", "FP1", "FP2", "FM1", "FM2", "GB1"};
@@ -41,6 +40,12 @@ public class MainActivity extends AppCompatActivity {
         predictBtn = findViewById(R.id.predict);
         cameraBtn = findViewById(R.id.camera);
 
+        try {
+            model = Detect.newInstance(MainActivity.this);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
         selecionarBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -54,11 +59,7 @@ public class MainActivity extends AppCompatActivity {
         predictBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-
-                try {
-                    model = Detect.newInstance(MainActivity.this);
-                    processedBitmap = bitmap;
-
+                if (bitmap != null) {
                     TensorImage normalizedInputImageTensor = TensorImage.fromBitmap(bitmap);
 
                     // Runs model inference and gets result.
@@ -94,23 +95,16 @@ public class MainActivity extends AppCompatActivity {
                         float classIndex = indexOfClassesDetected[mostConfidents.get(i)];
 
                         // Draw the box and label on image.
-                        processedBitmap = drawBoundingBox(processedBitmap, box, score,
-                                classes[(int)classIndex]);
+                        bitmap = drawBoundingBox(bitmap, box, score,
+                                classes[(int) classIndex]);
                     }
 
                     // Show the results on UI.
-                    imagem.setImageBitmap(processedBitmap);
-
-                    // Releases model resources if no longer used.
-                    model.close();
-
-                } catch (IOException e) {
-                    // Handle any exceptions during inference.
-                    e.printStackTrace();
-                    // Display an error message to the user if necessary.
-                    Toast.makeText(MainActivity.this, "Error during inference: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                    imagem.setImageBitmap(bitmap);
                 }
-
+                else {
+                    Toast.makeText(MainActivity.this, "Selecione uma imagem.", Toast.LENGTH_LONG).show();
+                }
             }
         });
 
@@ -118,6 +112,7 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onClick(View v) {
                 try {
+                    model.close();
                     Intent intent = new Intent(MainActivity.this, CameraActivity.class);
                     startActivity(intent);
                 } catch (Exception e) {
@@ -188,7 +183,6 @@ public class MainActivity extends AppCompatActivity {
                 mostConfidentDetections.add(i);
             }
         }
-
         return mostConfidentDetections;
     }
 }

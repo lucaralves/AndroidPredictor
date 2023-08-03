@@ -37,7 +37,7 @@ public class CameraActivity extends AppCompatActivity {
     private static final SparseIntArray ORIENTATIONS = new SparseIntArray();
 
     Bitmap bitmap;
-    Bitmap processedBitmap;
+    Bitmap scaledBitmap;
     Detect model;
     String[] classes = {"FF1", "FF2", "FB2", "FB1", "FE1", "FE2", "GB2", "FP1", "FP2", "FM1", "FM2", "GB1"};
 
@@ -65,6 +65,12 @@ public class CameraActivity extends AppCompatActivity {
         textureView = findViewById(R.id.texture);
         imageView = findViewById(R.id.imageView);
 
+        try {
+            model = Detect.newInstance(CameraActivity.this);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
         if (textureView != null) {
             textureView.setSurfaceTextureListener(textureListner);
         }
@@ -91,55 +97,48 @@ public class CameraActivity extends AppCompatActivity {
         public void onSurfaceTextureUpdated(@NonNull SurfaceTexture surface) {
 
             bitmap = textureView.getBitmap();
-            processedBitmap = bitmap;
+            scaledBitmap = Bitmap.createScaledBitmap(bitmap, imageDimension.getHeight(), imageDimension.getWidth(), false);
 
-            try {
-                model = Detect.newInstance(CameraActivity.this);
+            TensorImage normalizedInputImageTensor = TensorImage.fromBitmap(scaledBitmap);
 
-                TensorImage normalizedInputImageTensor = TensorImage.fromBitmap(bitmap);
+            // Runs model inference and gets result.
+            Detect.Outputs outputs = model.process(normalizedInputImageTensor);
 
-                // Runs model inference and gets result.
-                Detect.Outputs outputs = model.process(normalizedInputImageTensor);
+            // Detection Scores.
+            TensorBuffer outputFeature0 = outputs.getScoresAsTensorBuffer();
+            // Bounding Boxes.
+            TensorBuffer outputFeature1 = outputs.getLocationsAsTensorBuffer();
+            // Index Of Classes Detected.
+            TensorBuffer outputFeature3 = outputs.getClassesAsTensorBuffer();
 
-                // Detection Scores.
-                TensorBuffer outputFeature0 = outputs.getScoresAsTensorBuffer();
-                // Bounding Boxes.
-                TensorBuffer outputFeature1 = outputs.getLocationsAsTensorBuffer();
-                // Index Of Classes Detected.
-                TensorBuffer outputFeature3 = outputs.getClassesAsTensorBuffer();
+            // Converte-se o output do modelo num array float.
+            float[] detectionScores = outputFeature0.getFloatArray();
+            float[] boundingBoxes = outputFeature1.getFloatArray();
+            float[] indexOfClassesDetected = outputFeature3.getFloatArray();
 
-                // Converte-se o output do modelo num array float.
-                float[] detectionScores = outputFeature0.getFloatArray();
-                float[] boundingBoxes = outputFeature1.getFloatArray();
-                float[] indexOfClassesDetected = outputFeature3.getFloatArray();
+            // Get the index of the most confident detections.
+            ArrayList<Integer> mostConfidents = getMostConfidentDetections(detectionScores);
 
-                // Get the index of the most confident detections.
-                ArrayList<Integer> mostConfidents = getMostConfidentDetections(detectionScores);
+            for (int i = 0; i < mostConfidents.size(); i++) {
+                // Get the bounding box coordinates.
+                float[] box = new float[4];
+                box[1] = boundingBoxes[mostConfidents.get(i) * 4]; // ymin
+                box[0] = boundingBoxes[(mostConfidents.get(i) * 4) + 1]; // xmin
+                box[3] = boundingBoxes[(mostConfidents.get(i) * 4) + 2]; // ymax
+                box[2] = boundingBoxes[(mostConfidents.get(i) * 4) + 3]; // xmax
 
-                for (int i = 0; i < mostConfidents.size(); i++) {
-                    // Get the bounding box coordinates.
-                    float[] box = new float[4];
-                    box[1] = boundingBoxes[mostConfidents.get(i) * 4]; // ymin
-                    box[0] = boundingBoxes[(mostConfidents.get(i) * 4) + 1]; // xmin
-                    box[3] = boundingBoxes[(mostConfidents.get(i) * 4) + 2]; // ymax
-                    box[2] = boundingBoxes[(mostConfidents.get(i) * 4) + 3]; // xmax
+                // Get the detection score.
+                float score = detectionScores[mostConfidents.get(i)];
 
-                    // Get the detection score.
-                    float score = detectionScores[mostConfidents.get(i)];
+                // Get the class label index.
+                float classIndex = indexOfClassesDetected[mostConfidents.get(i)];
 
-                    // Get the class label index.
-                    float classIndex = indexOfClassesDetected[mostConfidents.get(i)];
-
-                    // Draw the box and label on image.
-                    processedBitmap = drawBoundingBox(processedBitmap, box, score,
-                            classes[(int)classIndex]);
-                }
-                imageView.setImageBitmap(processedBitmap);
-
-            } catch (IOException e) {
-                e.printStackTrace();
+                // Draw the box and label on image.
+                scaledBitmap = drawBoundingBox(scaledBitmap, box, score,
+                        classes[(int)classIndex]);
             }
-
+            imageView.setImageBitmap(null);
+            imageView.setImageBitmap(scaledBitmap);
         }
     };
 
