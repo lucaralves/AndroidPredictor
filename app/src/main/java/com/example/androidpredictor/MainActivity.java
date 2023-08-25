@@ -8,9 +8,7 @@ import android.graphics.Paint;
 import android.net.Uri;
 import android.provider.MediaStore;
 import android.view.View;
-import android.widget.Button;
-import android.widget.ImageView;
-import android.widget.Toast;
+import android.widget.*;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import android.os.Bundle;
@@ -25,8 +23,11 @@ public class MainActivity extends AppCompatActivity {
 
     private ImageView imagem;
     Button selecionarBtn, predictBtn, cameraBtn;
+    private SeekBar seekBar;
+    private TextView textView;
     private Bitmap bitmap;
     private Detect model;
+    float confidenceThreshold = (float) 0.50;
 
     String[] classes = {"FF1", "FF2", "FB2", "FB1", "FE1", "FE2", "GB2", "FP1", "FP2", "FM1", "FM2", "GB1"};
 
@@ -39,6 +40,8 @@ public class MainActivity extends AppCompatActivity {
         selecionarBtn = findViewById(R.id.selecionar);
         predictBtn = findViewById(R.id.predict);
         cameraBtn = findViewById(R.id.camera);
+        seekBar = findViewById(R.id.seekBar);
+        textView = findViewById(R.id.textView);
 
         try {
             model = Detect.newInstance(MainActivity.this);
@@ -78,7 +81,7 @@ public class MainActivity extends AppCompatActivity {
                     float[] indexOfClassesDetected = outputFeature3.getFloatArray();
 
                     // Get the index of the most confident detections.
-                    ArrayList<Integer> mostConfidents = getMostConfidentDetections(detectionScores);
+                    ArrayList<Integer> mostConfidents = getMostConfidentDetections(detectionScores, confidenceThreshold);
 
                     for (int i = 0; i < mostConfidents.size(); i++) {
                         // Get the bounding box coordinates.
@@ -120,6 +123,36 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         });
+
+        // Define um listener para a SeekBar
+        seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                confidenceThreshold = (float) progress / 100.0f;
+                textView.setText("Limiar de confiança: " + progress + " %");
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+                // Chamado quando o usuário toca na SeekBar
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+                // Chamado quando o usuário para de tocar na SeekBar
+            }
+        });
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+
+        try {
+            model = Detect.newInstance(MainActivity.this);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     @Override
@@ -175,11 +208,11 @@ public class MainActivity extends AppCompatActivity {
         return outputBitmap;
     }
 
-    public static ArrayList<Integer> getMostConfidentDetections(float[] detections) {
+    public static ArrayList<Integer> getMostConfidentDetections(float[] detections, float confidenceThreshold) {
 
         ArrayList<Integer> mostConfidentDetections = new ArrayList<>();
         for (int i = 0; i < detections.length; i++) {
-            if (detections[i] >= 0.70) {
+            if (detections[i] >= confidenceThreshold) {
                 mostConfidentDetections.add(i);
             }
         }

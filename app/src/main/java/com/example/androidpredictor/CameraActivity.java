@@ -15,6 +15,8 @@ import android.util.SparseIntArray;
 import android.view.Surface;
 import android.view.TextureView;
 import android.widget.ImageView;
+import android.widget.SeekBar;
+import android.widget.TextView;
 import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
@@ -35,11 +37,14 @@ public class CameraActivity extends AppCompatActivity {
     private TextureView textureView;
     private ImageView imageView;
     private static final SparseIntArray ORIENTATIONS = new SparseIntArray();
+    private SeekBar seekBar;
+    private TextView textView;
 
     Bitmap bitmap;
     Bitmap scaledBitmap;
     Detect model;
     String[] classes = {"FF1", "FF2", "FB2", "FB1", "FE1", "FE2", "GB2", "FP1", "FP2", "FM1", "FM2", "GB1"};
+    float confidenceThreshold = (float) 0.50;
 
     private String cameraId;
     protected CameraDevice cameraDevice;
@@ -64,6 +69,8 @@ public class CameraActivity extends AppCompatActivity {
 
         textureView = findViewById(R.id.texture);
         imageView = findViewById(R.id.imageView);
+        seekBar = findViewById(R.id.seekBar);
+        textView = findViewById(R.id.textView);
 
         try {
             model = Detect.newInstance(CameraActivity.this);
@@ -74,6 +81,25 @@ public class CameraActivity extends AppCompatActivity {
         if (textureView != null) {
             textureView.setSurfaceTextureListener(textureListner);
         }
+
+        // Define um listener para a SeekBar
+        seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                confidenceThreshold = (float) progress / 100.0f;
+                textView.setText("Limiar de confiança: " + progress + " %");
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+                // Chamado quando o usuário toca na SeekBar
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+                // Chamado quando o usuário para de tocar na SeekBar
+            }
+        });
     }
 
     TextureView.SurfaceTextureListener textureListner = new TextureView.SurfaceTextureListener() {
@@ -117,7 +143,7 @@ public class CameraActivity extends AppCompatActivity {
             float[] indexOfClassesDetected = outputFeature3.getFloatArray();
 
             // Get the index of the most confident detections.
-            ArrayList<Integer> mostConfidents = getMostConfidentDetections(detectionScores);
+            ArrayList<Integer> mostConfidents = getMostConfidentDetections(detectionScores, confidenceThreshold);
 
             for (int i = 0; i < mostConfidents.size(); i++) {
                 // Get the bounding box coordinates.

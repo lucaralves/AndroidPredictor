@@ -7,17 +7,37 @@
         android:orientation="vertical"
         tools:context=".CameraActivity">
 
+        <TextView
+                android:id="@+id/textView"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_below="@id/seekBar"
+                android:layout_centerHorizontal="true"
+                android:paddingTop="16dp"
+                android:text="Limiar de confiança: 50 %"
+                android:textSize="16sp" />
+
         <TextureView
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:id="@+id/texture"
-        />
+                android:layout_marginTop="110dp" />
 
         <ImageView
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:background="#000"
                 android:id="@+id/imageView"
-        />
+                android:layout_marginTop="110dp"/>
+
+        <SeekBar
+                android:id="@+id/seekBar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_margin="16dp"
+                android:max="100"
+                android:progress="50"
+                android:thumb="@drawable/custom_thumb"
+                android:progressDrawable="@drawable/custom_seekbar_progress" />
 
 </RelativeLayout>
