@@ -2,8 +2,11 @@ package com.example.androidpredictor;
 
 import android.Manifest;
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.graphics.*;
+import android.graphics.Bitmap;
+import android.graphics.Matrix;
+import android.graphics.SurfaceTexture;
 import android.hardware.camera2.*;
 import android.hardware.camera2.params.StreamConfigurationMap;
 import android.os.Bundle;
@@ -14,37 +17,30 @@ import android.util.Size;
 import android.util.SparseIntArray;
 import android.view.Surface;
 import android.view.TextureView;
+import android.view.View;
+import android.widget.Button;
 import android.widget.ImageView;
-import android.widget.SeekBar;
-import android.widget.TextView;
 import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
-import com.example.androidpredictor.ml.Detect;
-import org.tensorflow.lite.support.image.TensorImage;
-import org.tensorflow.lite.support.tensorbuffer.TensorBuffer;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Arrays;
 
 import static android.content.ContentValues.TAG;
-import static com.example.androidpredictor.MainActivity.*;
 
-public class CameraActivity extends AppCompatActivity {
+public class CameraActivityOcr extends AppCompatActivity {
 
     private TextureView textureView;
     private ImageView imageView;
     private static final SparseIntArray ORIENTATIONS = new SparseIntArray();
-    private SeekBar seekBar;
-    private TextView textView;
+    private Button button;
 
-    Bitmap bitmap;
-    Bitmap scaledBitmap;
-    Detect model;
-    String[] classes = {"FF1", "FF2", "FB2", "FB1", "FE1", "FE2", "GB2", "FP1", "FP2", "FM1", "FM2", "GB1"};
-    float confidenceThreshold = (float) 0.50;
+    private Bitmap bitmap;
+    private Bitmap scaledBitmap;
 
     private String cameraId;
     protected CameraDevice cameraDevice;
@@ -62,42 +58,40 @@ public class CameraActivity extends AppCompatActivity {
         ORIENTATIONS.append(Surface.ROTATION_270, 180);
     }
 
-    @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_camera);
+        setContentView(R.layout.activity_camera_ocr);
 
         textureView = findViewById(R.id.texture);
         imageView = findViewById(R.id.imageView);
-        seekBar = findViewById(R.id.seekBar);
-        textView = findViewById(R.id.textView);
-
-        try {
-            model = Detect.newInstance(CameraActivity.this);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        button = findViewById(R.id.button);
 
         if (textureView != null) {
             textureView.setSurfaceTextureListener(textureListner);
         }
 
-        // Define um listener para a SeekBar
-        seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+        button.setOnClickListener(new View.OnClickListener() {
             @Override
-            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                confidenceThreshold = (float) progress / 100.0f;
-                textView.setText("Limiar de confiança: " + progress + " %");
-            }
+            public void onClick(View v) {
+                Matrix matrix = new Matrix();
+                matrix.postRotate(0);
+                scaledBitmap = Bitmap.createBitmap(scaledBitmap, 0, 0, scaledBitmap.getWidth(),
+                        scaledBitmap.getHeight(), matrix, true);
 
-            @Override
-            public void onStartTrackingTouch(SeekBar seekBar) {
-                // Chamado quando o usuário toca na SeekBar
-            }
+                File tempFile = new File(getCacheDir(), "temp_image.jpeg");
+                try {
+                    FileOutputStream fos = new FileOutputStream(tempFile);
+                    scaledBitmap.compress(Bitmap.CompressFormat.JPEG, 100, fos);
+                    fos.flush();
+                    fos.close();
 
-            @Override
-            public void onStopTrackingTouch(SeekBar seekBar) {
-                // Chamado quando o usuário para de tocar na SeekBar
+                    Intent intent = new Intent();
+                    setResult(RESULT_OK, intent);
+                    intent.putExtra("image_path", tempFile.getAbsolutePath());
+                    finish();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
             }
         });
     }
@@ -123,46 +117,9 @@ public class CameraActivity extends AppCompatActivity {
         public void onSurfaceTextureUpdated(@NonNull SurfaceTexture surface) {
 
             bitmap = textureView.getBitmap();
-            scaledBitmap = Bitmap.createScaledBitmap(bitmap, imageDimension.getHeight(), imageDimension.getWidth(), false);
+            scaledBitmap = Bitmap.createScaledBitmap(bitmap, imageDimension.getHeight(),
+                    imageDimension.getWidth(), false);
 
-            TensorImage normalizedInputImageTensor = TensorImage.fromBitmap(scaledBitmap);
-
-            // Runs model inference and gets result.
-            Detect.Outputs outputs = model.process(normalizedInputImageTensor);
-
-            // Detection Scores.
-            TensorBuffer outputFeature0 = outputs.getScoresAsTensorBuffer();
-            // Bounding Boxes.
-            TensorBuffer outputFeature1 = outputs.getLocationsAsTensorBuffer();
-            // Index Of Classes Detected.
-            TensorBuffer outputFeature3 = outputs.getClassesAsTensorBuffer();
-
-            // Converte-se o output do modelo num array float.
-            float[] detectionScores = outputFeature0.getFloatArray();
-            float[] boundingBoxes = outputFeature1.getFloatArray();
-            float[] indexOfClassesDetected = outputFeature3.getFloatArray();
-
-            // Get the index of the most confident detections.
-            ArrayList<Integer> mostConfidents = getMostConfidentDetections(detectionScores, confidenceThreshold);
-
-            for (int i = 0; i < mostConfidents.size(); i++) {
-                // Get the bounding box coordinates.
-                float[] box = new float[4];
-                box[1] = boundingBoxes[mostConfidents.get(i) * 4]; // ymin
-                box[0] = boundingBoxes[(mostConfidents.get(i) * 4) + 1]; // xmin
-                box[3] = boundingBoxes[(mostConfidents.get(i) * 4) + 2]; // ymax
-                box[2] = boundingBoxes[(mostConfidents.get(i) * 4) + 3]; // xmax
-
-                // Get the detection score.
-                float score = detectionScores[mostConfidents.get(i)];
-
-                // Get the class label index.
-                float classIndex = indexOfClassesDetected[mostConfidents.get(i)];
-
-                // Draw the box and label on image.
-                scaledBitmap = drawBoundingBox(scaledBitmap, box, score,
-                        classes[(int)classIndex]);
-            }
             imageView.setImageBitmap(null);
             imageView.setImageBitmap(scaledBitmap);
         }
@@ -227,7 +184,7 @@ public class CameraActivity extends AppCompatActivity {
 
                 @Override
                 public void onConfigureFailed(@NonNull CameraCaptureSession session) {
-                    Toast.makeText(CameraActivity.this, "Configuration change", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(CameraActivityOcr.this, "Configuration change", Toast.LENGTH_SHORT).show();
                 }
             }, null);
         } catch (CameraAccessException e) {
@@ -247,9 +204,10 @@ public class CameraActivity extends AppCompatActivity {
             assert map != null;
             imageDimension = map.getOutputSizes(SurfaceTexture.class)[0];
 
-            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED &&
-                    ActivityCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(CameraActivity.this, new String[]{Manifest.permission.CAMERA,
+            if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA) !=
+                    PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this,
+                    android.Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(CameraActivityOcr.this, new String[]{android.Manifest.permission.CAMERA,
                         Manifest.permission.WRITE_EXTERNAL_STORAGE}, REQUEST_CAMERA_PERMISSION);
             }
 
@@ -276,12 +234,14 @@ public class CameraActivity extends AppCompatActivity {
     }
 
     @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
+                                           @NonNull int[] grantResults) {
 
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == REQUEST_CAMERA_PERMISSION) {
             if (grantResults[0] == PackageManager.PERMISSION_DENIED) {
-                Toast.makeText(CameraActivity.this, "You can´t use this app without granting permissions", Toast.LENGTH_LONG).show();
+                Toast.makeText(CameraActivityOcr.this,
+                        "You can´t use this app without granting permissions", Toast.LENGTH_LONG).show();
                 finish();
             }
         }

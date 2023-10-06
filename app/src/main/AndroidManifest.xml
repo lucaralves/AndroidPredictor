@@ -4,6 +4,9 @@
 
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" />
+    <uses-feature android:name="android.hardware.camera.autofocus" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
 
     <application
             android:allowBackup="true"
@@ -12,6 +15,7 @@
             android:roundIcon="@mipmap/ic_launcher_round"
             android:supportsRtl="true"
             android:theme="@style/Theme.AndroidPredictor">
+
         <activity
                 android:name=".MainActivity"
                 android:exported="true">
@@ -21,9 +25,24 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-
         <activity
-                android:name=".CameraActivity"
+                android:name=".MainActivityObjectDetection"
+                android:exported="true">
+        </activity>
+        <activity
+                android:name=".CameraActivityObjectDetection"
+                android:exported="true">
+        </activity>
+        <activity
+                android:name=".MainActivityOcr"
+                android:exported="true">
+        </activity>
+        <activity
+                android:name=".CameraActivityOcr"
+                android:exported="true">
+        </activity>
+        <activity
+                android:name=".WebActivityOcr"
                 android:exported="true">
         </activity>
     </application>
